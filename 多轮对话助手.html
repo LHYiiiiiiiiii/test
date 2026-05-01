@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多轮对话助手</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+
+        body {
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 0 20px;
+            background: #f7f8fa;
+        }
+
+        .title {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .desc {
+            text-align: center;
+            color: #666;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+
+        .api-input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            height: 500px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            border: 1px solid #eee;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 10px;
+            line-height: 1.5;
+        }
+
+        .user-msg {
+            background: #0066cc;
+            color: white;
+            margin-left: auto;
+        }
+
+        .bot-msg {
+            background: #f1f3f5;
+            color: #333;
+            margin-right: auto;
+        }
+
+        .loading {
+            color: #0066cc;
+            font-style: italic;
+            padding: 10px;
+        }
+
+        .error {
+            color: #ff4d4f;
+            padding: 10px;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        #userInput {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            resize: none;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .clear-btn {
+            background: #6c757d;
+        }
+    </style>
+</head>
+
+<body>
+    <h2 class="title">多轮对话助手</h2>
+    <p class="desc">基于阿里云百炼 qwen3.6-plus 模型，支持上下文连续对话</p>
+
+    <input type="password" class="api-input" id="apiKey" placeholder="请输入阿里云百炼 API Key">
+
+    <div class="chat-container" id="chatBox"></div>
+
+    <div class="input-area">
+        <textarea id="userInput" rows="3" placeholder="请输入消息，支持多轮对话..."></textarea>
+        <button class="btn" id="sendBtn">发送</button>
+        <button class="btn clear-btn" id="clearBtn">清空</button>
+    </div>
+
+    <script>
+        // 配置
+        const API_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+        const MODEL = "qwen3.6-plus";
+        
+        // 对话历史（多轮核心）
+        let messages = [];
+
+        // DOM
+        const apiKeyInput = document.getElementById("apiKey");
+        const chatBox = document.getElementById("chatBox");
+        const userInput = document.getElementById("userInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const clearBtn = document.getElementById("clearBtn");
+
+        // 发送消息
+        sendBtn.addEventListener("click", async () => {
+            const apiKey = apiKeyInput.value.trim();
+            const content = userInput.value.trim();
+
+            if (!apiKey) {
+                addMessage("请先输入 API Key", "error");
+                return;
+            }
+            if (!content) {
+                addMessage("请输入对话内容", "error");
+                return;
+            }
+
+            // 显示用户消息
+            addMessage(content, "user");
+            userInput.value = "";
+
+            // 加入历史
+            messages.push({ role: "user", content });
+
+            // 加载提示
+            addMessage("思考中...", "loading");
+            sendBtn.disabled = true;
+
+            try {
+                const res = await fetch(API_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + apiKey
+                    },
+                    body: JSON.stringify({
+                        model: MODEL,
+                        messages: messages
+                    })
+                });
+
+                // 移除加载
+                chatBox.removeChild(chatBox.lastChild);
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.error?.message || "请求失败");
+
+                const reply = data.choices[0].message.content;
+                messages.push({ role: "assistant", content: reply });
+                addMessage(reply, "bot");
+
+            } catch (err) {
+                chatBox.removeChild(chatBox.lastChild);
+                addMessage("错误：" + err.message, "error");
+            } finally {
+                sendBtn.disabled = false;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        });
+
+        // 清空对话
+        clearBtn.addEventListener("click", () => {
+            messages = [];
+            chatBox.innerHTML = "";
+            addMessage("对话已清空", "bot");
+        });
+
+        // 添加消息到页面
+        function addMessage(text, type) {
+            const div = document.createElement("div");
+            div.className = "message " + type + "-msg";
+            if (type === "loading" || type === "error") {
+                div.className = type;
+            }
+            div.innerText = text;
+            chatBox.appendChild(div);
+        }
+    </script>
+</body>
+</html>
